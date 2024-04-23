@@ -17,13 +17,14 @@ def parse_args():
     parser.add_argument("--version", '-v', type=int, default=None)
     parser.add_argument('--results_dir', type=str, default="./results/", help="results directory")
     parser.add_argument('--method_name', type=str, default="materialistic", help="results directory")
-    parser.add_argument('--resume', action='store_true', default=False,
-                        help="Whether to resume training from a checkpoint.")
     parser.add_argument('--checkpoint_dir', type=str, default='./checkpoints/',
                         help='Path to the checkpoint directory.')
     parser.add_argument('--precision', type=int, default=32, help='Precision level to use.')
     parser.add_argument('--print_every', type=int, default=500, help='Print loss every n iterations.')
+    parser.add_argument('--metrics', action='store_true', default=False, help='Whether calculate metrics,if is false, result will output to results dir.')
     # parser.add_argument("--test", action='store_true')
+    parser.add_argument('--swin', action='store_true', default=False, help="Test")
+    parser.add_argument('--prec', action='store_true', default=False, help="Test")
 
     args = parser.parse_args()
     with open(args.config) as f:

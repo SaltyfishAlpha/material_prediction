@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.optim as optim
 import pytorch_lightning as pl
@@ -6,6 +7,7 @@ from pytorch_lightning.utilities.types import STEP_OUTPUT, EPOCH_OUTPUT
 import material_prediction.src.models.swin as swin
 import material_prediction.materialistic.src.models.model_utils_pl as model_utils
 import material_prediction.src.loss_functions as loss_functions
+import material_prediction.src.utils as m_utils
 
 from torchinfo import summary
 
@@ -121,7 +123,7 @@ class FeatureFusionBlock_custom(torch.nn.Module):
 
 
 class Materoal_Prediction_Module(pl.LightningModule):
-    def __init__(self, mconf, margs, use_swin=False):
+    def __init__(self, mconf, margs, use_swin=False, load_location=None):
         super().__init__()
         # test
         self.use_swin = use_swin
@@ -129,7 +131,7 @@ class Materoal_Prediction_Module(pl.LightningModule):
         self.output_channel = 5
         # materialistic module
         self.mtModule = model_utils.create_model(mconf, margs)
-        self.mtModule.load_checkpoint(margs.checkpoint_dir, map_location=torch.device('cuda:2'))
+        self.mtModule.load_checkpoint(margs.checkpoint_dir, map_location=load_location)
         self.mtModule.eval()
         # fix parameters
         for k, param in self.mtModule.named_parameters():
@@ -173,7 +175,8 @@ class Materoal_Prediction_Module(pl.LightningModule):
                                             torch.nn.ReLU(),
                                             torch.nn.Linear(128, 128),
                                             torch.nn.ReLU(),
-                                            torch.nn.Linear(128, self.output_channel))
+                                            torch.nn.Linear(128, self.output_channel),
+                                            torch.nn.Sigmoid())
 
         self.conv1 = torch.nn.Sequential(torch.nn.Conv2d(256, 256, kernel_size=5, padding=2, bias=True),
                                          torch.nn.ReLU(),
@@ -259,31 +262,30 @@ class Materoal_Prediction_Module(pl.LightningModule):
 #   Top Module
 ######################################
 class TopModule(pl.LightningModule):
-    def __init__(self, mconf, margs, cfg, use_swin=False):
+    def __init__(self, mconf, margs, cfg, use_swin=False, load_location=None, eps=1e-4, use_prec=False):
         super().__init__()
         # config
         self.cfg = cfg
+        self.eps = eps
+        self.use_prec = use_prec
+        self.load_location = torch.device('cuda:0') if load_location is None else load_location
         # net
-        self.net = Materoal_Prediction_Module(mconf, margs, use_swin=use_swin)
+        self.net = Materoal_Prediction_Module(mconf, margs, use_swin=use_swin, load_location=self.load_location)
         # loss
         self.perceptual_loss = loss_functions.PerceptualLoss()
         # log
-        self.logsets = []
+        # self.logsets = []
 
     def forward(self, x):
         return self.net(x)
 
     def training_step(self, batch, batch_idx):
         albedo = batch['img']['albedo']
-        # normal = batch['img']['normal']
         rough = batch['img']['roughness']
         metal = batch['img']['metallic']
-        # depth = batch['img']['depth']
 
         segAlb = batch['img']['segAlb']
         segMat = batch['img']['segMat']
-
-        # segGeo = batch['img']['segGeo']
 
         im = batch['img']['im']
 
@@ -293,44 +295,34 @@ class TopModule(pl.LightningModule):
 
         albedoPred = torch.clamp(albedoPred, 0, 1)
 
-        # depthPred = loss_functions.LSregress(depthPred * segGeo, depth * segGeo, depthPred)
-        # depthPred = torch.clamp(depthPred, min=0)
-
-        pixAlbNum = torch.sum(segAlb).item()
-        pixMatNum = torch.sum(segMat).item()
-
-        # pixGeoNum = torch.sum(segGeo).item()
+        pixAlbNum = torch.sum(segAlb).item() + self.eps
+        pixMatNum = torch.sum(segMat).item() + self.eps
 
         L2Err = torch.sum(
             (torch.log1p(albedoPred) - torch.log1p(albedo)) * (torch.log1p(albedoPred) - torch.log1p(albedo)) * segAlb
         ) / pixAlbNum / 3.0
-        percErr = self.perceptual_loss(albedoPred, albedo, segAlb, layers=self.cfg.train.perceptual.albedo) # todo: remove
-        albedoErr = 0.5 * (L2Err + percErr * self.cfg.train.perceptual.weight)
+        percErr = 0
+        if self.use_prec:
+            percErr = self.perceptual_loss(albedoPred, albedo, segAlb, layers=self.cfg.train.perceptual.albedo) # todo: remove
 
-        # percErr = self.perceptual_loss(normalPred, normal, segGeo, layers=self.cfg.train.perceptual.normal)
-        # normalErr = loss_functions.normal_loss(normalPred, normal, segGeo)
-        # normalErr = 0.5 * (normalErr + percErr * self.cfg.train.perceptual.weight)
+        albedoErr = 0.5 * (L2Err + percErr * self.cfg.train.perceptual.weight)
 
         roughErr = torch.sum((roughPred - rough) * (roughPred - rough) * segMat) / pixMatNum
         metalErr = torch.sum((metalPred - metal) * (metalPred - metal) * segMat) / pixMatNum
 
         matErr = roughErr + metalErr
 
-        # roughPred = matPred[:, 0:1, ...]
-        # metalPred = matPred[:, 1:2, ...]
-
-        percErrRough = self.perceptual_loss(roughPred.expand(-1, 3, -1, -1), rough.expand(-1, 3, -1, -1), segMat,
-                                            layers=self.cfg.train.perceptual.material)
-        percErrMetal = self.perceptual_loss(metalPred.expand(-1, 3, -1, -1), metal.expand(-1, 3, -1, -1), segMat,
-                                            layers=self.cfg.train.perceptual.material)
+        percErrRough = 0
+        percErrMetal = 0
+        if self.use_prec:
+            percErrRough = self.perceptual_loss(roughPred.expand(-1, 3, -1, -1), rough.expand(-1, 3, -1, -1), segMat,
+                                                layers=self.cfg.train.perceptual.material)
+            percErrMetal = self.perceptual_loss(metalPred.expand(-1, 3, -1, -1), metal.expand(-1, 3, -1, -1), segMat,
+                                                layers=self.cfg.train.perceptual.material)
 
         matErr = 0.5 * ((percErrRough + percErrMetal) * self.cfg.train.perceptual.weight * 0.5 + matErr)
 
-        # depthErr = torch.sum((torch.log(depthPred + 1) - torch.log(depth + 1)) * (
-        #         torch.log(depthPred + 1) - torch.log(depth + 1)) * segGeo) / pixGeoNum
-
         loss = albedoErr + matErr
-        # loss = albedoErr + normalErr + matErr + depthErr
 
         with torch.no_grad():
             self.log_dict({
@@ -338,32 +330,19 @@ class TopModule(pl.LightningModule):
                 'train/albedo_loss': albedoErr,
                 'train/material_loss': matErr,
             })
-            self.logsets.append({
-                'loss': loss,
-                'albedo_loss': albedoErr,
-                'material_loss': matErr,
-            })
-        # return {
-        #     'loss': loss,
-        #     'albedo_loss': albedoErr,
-        #     'normal_loss': normalErr,
-        #     'material_loss': matErr,
-        #     'depth_loss': depthErr
-        # }
-        return {'loss': loss}
+        return {
+            'loss': loss,
+            'albedo_loss': albedoErr,
+            'material_loss': matErr,
+        }
 
     def validation_step(self, batch, batch_idx):
         albedo = batch['img']['albedo']  # 3
         rough = batch['img']['roughness']  # 1
         metal = batch['img']['metallic']  # 1
 
-        # normal = batch['img']['normal']  # 3
-        # depth = batch['img']['depth']  # 1
-
         segAlb = batch['img']['segAlb']  # 1
         segMat = batch['img']['segMat']  # 1
-
-        # segGeo = batch['img']['segGeo']  # 1
 
         im = batch['img']['im']
 
@@ -373,30 +352,38 @@ class TopModule(pl.LightningModule):
 
         albedoPred = torch.clamp(albedoPred, 0, 1)
 
-        # depthPred = loss_functions.LSregress(depthPred * segGeo, depth * segGeo, depthPred)
-        # depthPred = torch.clamp(depthPred, min=0)
-
-        pixAlbNum = torch.sum(segAlb).item()
-        pixMatNum = torch.sum(segMat).item() # TODO: isZero?
-
-        # pixGeoNum = torch.sum(segGeo).item()
+        pixAlbNum = torch.sum(segAlb).item() + self.eps
+        pixMatNum = torch.sum(segMat).item() + self.eps
 
         albedoErr = torch.sum((albedoPred - albedo) * (albedoPred - albedo) * segAlb) / pixAlbNum / 3.0
-
-        # normalErr = torch.sum((normalPred - normal) * (normalPred - normal) * segGeo) / pixGeoNum / 3.0
 
         roughErr = torch.sum((roughPred - rough) * (roughPred - rough) * segMat) / pixMatNum
         metalErr = torch.sum((metalPred - metal) * (metalPred - metal) * segMat) / pixMatNum
 
-        # depthErr = torch.sum((torch.log(depthPred + 1) - torch.log(depth + 1)) * (
-        #         torch.log(depthPred + 1) - torch.log(depth + 1)) * segGeo) / pixGeoNum
-
         albLoss = albedoErr
-        # normLoss = normalErr
-        matLoss = (roughErr + metalErr)
-        # depthLoss = depthErr
-
+        matLoss = roughErr + metalErr
         totalErr = albLoss + matLoss
+
+        #######################
+        albedoErr_withPerc = albLoss
+        matLoss_withPrec = matLoss
+        loss_withPrec = totalErr
+        if self.use_prec:
+            L2Err = torch.sum(
+                (torch.log1p(albedoPred) - torch.log1p(albedo)) * (torch.log1p(albedoPred) - torch.log1p(albedo)) * segAlb
+            ) / pixAlbNum / 3.0
+            with torch.no_grad():
+                percErr = self.perceptual_loss(albedoPred, albedo, segAlb, layers=self.cfg.train.perceptual.albedo)
+            albedoErr_withPerc = 0.5 * (L2Err + percErr * self.cfg.train.perceptual.weight)
+
+            with torch.no_grad():
+                percErrRough = self.perceptual_loss(roughPred.expand(-1, 3, -1, -1), rough.expand(-1, 3, -1, -1), segMat,
+                                                    layers=self.cfg.train.perceptual.material)
+                percErrMetal = self.perceptual_loss(metalPred.expand(-1, 3, -1, -1), metal.expand(-1, 3, -1, -1), segMat,
+                                                    layers=self.cfg.train.perceptual.material)
+            matLoss_withPrec = 0.5 * ((percErrRough + percErrMetal) * self.cfg.train.perceptual.weight * 0.5 + matLoss)
+
+            loss_withPrec = albedoErr_withPerc + matLoss_withPrec
 
         self.log('loss', totalErr, prog_bar=True, logger=False, on_step=True, on_epoch=False)
         return {
@@ -405,6 +392,9 @@ class TopModule(pl.LightningModule):
             'material_loss': matLoss,
             'roughness_loss': roughErr,
             'metallic_loss': metalErr,
+            'albedo_loss_with_preceptual': albedoErr_withPerc,
+            'material_loss_with_perceptual': matLoss_withPrec,
+            'loss_withPrec': loss_withPrec,
         }
 
     def validation_epoch_end(self, outputs):
@@ -413,24 +403,73 @@ class TopModule(pl.LightningModule):
         material_loss = torch.stack([x['material_loss'] for x in outputs]).mean()
         roughness_loss = torch.stack([x['roughness_loss'] for x in outputs]).mean()
         metallic_loss = torch.stack([x['metallic_loss'] for x in outputs]).mean()
+        albedo_loss_with_preceptual = torch.stack([x['albedo_loss_with_preceptual'] for x in outputs]).mean()
+        material_loss_with_perceptual = torch.stack([x['material_loss_with_perceptual'] for x in outputs]).mean()
+        loss_withPrec = torch.stack([x['loss_withPrec'] for x in outputs]).mean()
         self.log_dict({
             'validate/loss': loss,
             'validate/albedo_loss': albedo_loss,
             'validate/material_loss': material_loss,
             'validate/roughness_loss': roughness_loss,
             'validate/metallic_loss': metallic_loss,
+            'validate/albedo_loss_with_preceptual': albedo_loss_with_preceptual,
+            'validate/material_loss_with_perceptual': material_loss_with_perceptual,
+            'validate/loss_withPrec': loss_withPrec,
         })
 
     def training_epoch_end(self, outputs):
-        loss = torch.stack([x['loss'] for x in self.logsets]).mean()
-        albedo_loss = torch.stack([x['albedo_loss'] for x in self.logsets]).mean()
-        material_loss = torch.stack([x['material_loss'] for x in self.logsets]).mean()
+        loss = torch.stack([x['loss'] for x in outputs]).mean()
+        albedo_loss = torch.stack([x['albedo_loss'] for x in outputs]).mean()
+        material_loss = torch.stack([x['material_loss'] for x in outputs]).mean()
         with torch.no_grad():
             self.log_dict({
                 'train_total/loss': loss,
                 'train_total/albedo_loss': albedo_loss,
                 'train_total/material_loss': material_loss,
             })
+
+    def test_step(self, batch, batch_nb):
+        albedo = batch['img']['albedo']
+        rough = batch['img']['roughness']
+        metal = batch['img']['metallic']
+
+        segAlb = batch['img']['segAlb']
+        segMat = batch['img']['segMat']
+
+        im = batch['im']
+
+        ref_pos = batch['ref_pos']
+
+        predictions, scores, albedoPred, roughPred, metalPred = self.net(im, ref_pos)
+
+        albedoPred = torch.clamp(albedoPred, 0, 1)
+
+        m_utils.plot_images(albedo, albedoPred, im, segAlb, os.path.join(self.cfg.experiment.path_logs, f"test/albedo/{batch_nb:04d}.png"))
+        m_utils.plot_images(rough[:,0,...], roughPred[:,0,...], im, segMat[:,0,...], os.path.join(self.cfg.experiment.path_logs, f"test/roughness/{batch_nb:04d}.png"), colormap='jet')
+        m_utils.plot_images(metal[:,0,...], metalPred[:,1,...], im, segMat[:,0,...], os.path.join(self.cfg.experiment.path_logs, f"test/metallic/{batch_nb:04d}.png"), colormap='jet')
+
+        pixAlbNum = torch.sum(segAlb).item()
+        pixMatNum = torch.sum(segMat).item()
+
+        albedoErr = torch.sum((albedoPred - albedo) * (albedoPred - albedo) * segAlb) / pixAlbNum / 3.0
+        roughErr = torch.sum((roughPred - rough) * (roughPred - rough) * segMat) / pixMatNum
+        metalErr = torch.sum((metalPred - metal) * (metalPred - metal) * segMat) / pixMatNum
+
+        return {
+            'albedo_loss': albedoErr,
+            'roughness_loss': roughErr,
+            'metallic_loss': metalErr,
+        }
+
+    def test_epoch_end(self, outputs) -> None:
+        albedo_loss = torch.stack([x['albedo_loss'] for x in outputs]).mean()
+        roughness_loss = torch.stack([x['roughness_loss'] for x in outputs]).mean()
+        metallic_loss = torch.stack([x['metallic_loss'] for x in outputs]).mean()
+
+        with open(os.path.join(self.exp_dir, "test/metrics.txt"), 'w') as f:
+            f.write(f"[ALBEDO] {albedo_loss:.6f}\n")
+            f.write(f"[ROUGHNESS] {roughness_loss:.6f}\n")
+            f.write(f"[METALLIC] {metallic_loss:.6f}\n")
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), **self.cfg.optim)

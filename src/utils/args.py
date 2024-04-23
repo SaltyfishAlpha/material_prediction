@@ -27,6 +27,7 @@ def parse_args():
     # parser.add_argument("--test", action='store_true')
     parser.add_argument('--swin', action='store_true', default=False, help="Test")
     parser.add_argument('--small_size', action='store_true', default=False, help="Test")
+    parser.add_argument('--prec', action='store_true', default=False, help="Test")
 
     args = parser.parse_args()
     with open(args.config) as f:

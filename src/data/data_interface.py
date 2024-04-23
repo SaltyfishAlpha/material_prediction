@@ -9,9 +9,8 @@ import src.data.interior_dataset as interior_dataset
 
 
 class MPDataset(Dataset):
-    def __init__(self, args, mphase='TRAIN', small_size=False):
-        self.mgData = interior_dataset.MGDataset(**args, phase=mphase,
-                                                 trainset=("train_fit.txt" if small_size else "train.txt"))
+    def __init__(self, args, mphase='TRAIN'):
+        self.mgData = interior_dataset.MGDataset(**args, phase=mphase)
 
     def __len__(self):
         return self.mgData.__len__()

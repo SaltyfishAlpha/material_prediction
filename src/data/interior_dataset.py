@@ -21,18 +21,18 @@ class MGDataset(Dataset):
             self, dataRoot,
             imHeight=240, imWidth=320, preload_level=0,
             phase='TRAIN', sceneList: list = None, clamp_im=False, random_flip=False,
-            trainset='train.txt',
             **kwargs
     ):
         super().__init__()
 
         if phase.upper() == 'TRAIN':
-            sceneFile = osp.join(dataRoot, trainset)
-            # sceneFile = osp.join(dataRoot, 'train.txt')
+            sceneFile = osp.join(dataRoot, 'train1.txt')
         elif phase.upper() == 'TEST':
-            sceneFile = osp.join(dataRoot, 'test.txt')
+            sceneFile = osp.join(dataRoot, 'test1.txt')
         elif phase.upper() == 'VAL':
-            sceneFile = osp.join(dataRoot, 'val.txt')
+            sceneFile = osp.join(dataRoot, 'val1.txt')
+        elif phase.upper() == 'ALL':
+            sceneFile = osp.join(dataRoot, 'all.txt')
         elif sceneList is None:
             raise ValueError('Unrecognized phase for data loader')
 

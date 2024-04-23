@@ -90,14 +90,14 @@ class MaskedL2Loss(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, output: torch.Tensor, target: torch.Tensor, mask: torch.Tensor = None):
+    def forward(self, output: torch.Tensor, target: torch.Tensor, mask: torch.Tensor = None, eps=1e-4):
         loss = (output - target) ** 2
         if mask is not None:
             _, _, h, w = loss.shape
             _, _, hm, wm = mask.shape
             sh, sw = hm // h, wm // w
             mask0 = F.avg_pool2d(mask, kernel_size=(sh, sw), stride=(sh, sw)).expand_as(loss)
-            loss = (loss * mask0).sum() / mask0.sum()
+            loss = (loss * mask0).sum() / (mask0.sum()+eps)
         else:
             loss = loss.mean()
         return loss
