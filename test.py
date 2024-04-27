@@ -87,13 +87,18 @@ print()
 #######################################
 if args.metrics:
     trainer = pl.Trainer(accelerator="gpu",
-                         devices=[0],
+                         devices=[1],
                          precision=args.precision,
                          max_epochs=cfg.train.epochs,
                          logger=logger,
                          callbacks=[checkpoint_callback, pl.callbacks.RichProgressBar(leave=True)],
                          )
-    trainer.test(net, ckpt_path=os.path.join(args.checkpoint_dir, checkpoint_files[-1]))
+    # mkdir results
+    os.makedirs(os.path.join(cfg.experiment.path_logs, "test/albedo"), exist_ok=True)
+    os.makedirs(os.path.join(cfg.experiment.path_logs, "test/roughness"), exist_ok=True)
+    os.makedirs(os.path.join(cfg.experiment.path_logs, "test/metallic"), exist_ok=True)
+    trainer.test(net, ckpt_path=os.path.join(args.checkpoint_dir, checkpoint_files[-1]), dataloaders=test_data_loader)
+
 else: # output result
     net = net.cuda()
     net.load_from_checkpoint(os.path.join(args.checkpoint_dir, checkpoint_files[-1]), mconf=mconf, margs=margs, cfg=cfg,
@@ -151,3 +156,5 @@ else: # output result
                     materialistic_utils.convert_to_opencv_image(metalPred[0].numpy()))
         if i > 1:
             break
+
+torch.cuda.empty_cache()

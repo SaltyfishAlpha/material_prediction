@@ -261,7 +261,6 @@ class WindowAttention(nn.Module):
             shadow_correlation_map = 1 - shadow_correlation_map
             shadow_correlation_map = torch.unsqueeze(shadow_correlation_map, dim=1)
 
-            # 
             # one = torch.ones_like(shadow_detect_feature)
             # shadow_detect_feature = torch.where(shadow_detect_feature < 0.1, one, one*2)
             # shadow_correlation_map = shadow_detect_feature @ shadow_detect_feature.transpose(-2, -1)

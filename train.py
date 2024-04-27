@@ -167,3 +167,4 @@ else:
                          )
 
 trainer.fit(net, train_dataloaders=train_data_loader, val_dataloaders=val_data_loader)
+torch.cuda.empty_cache()

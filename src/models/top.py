@@ -147,27 +147,27 @@ class Materoal_Prediction_Module(pl.LightningModule):
         #              se_layer=False):
 
         self.swin_1 = swin.SIMTransformerBlock(out_channels, 8, (out_channels, out_channels), win_size=8)
-        # self.swin_2 = swin.SIMTransformerBlock(out_channels, 8, (out_channels // 2, out_channels // 2), win_size=8)
-        # self.swin_3 = swin.SIMTransformerBlock(out_channels, 8, (out_channels // 4, out_channels // 4), win_size=8)
-        # self.swin_4 = swin.SIMTransformerBlock(out_channels, 8, (out_channels // 4, out_channels // 4), win_size=8)
-        #
-        # # fusion layers
-        # self.fusion_1 = FeatureFusionBlock_custom(out_channels,
-        #                                           torch.nn.ReLU(),
-        #                                           align_corners=True)
-        #
-        # self.fusion_2 = FeatureFusionBlock_custom(out_channels,
-        #                                           torch.nn.ReLU(),
-        #                                           align_corners=True)
-        #
-        # self.fusion_3 = FeatureFusionBlock_custom(out_channels,
-        #                                           torch.nn.ReLU(),
-        #                                           align_corners=True)
-        #
-        # self.fusion_4 = FeatureFusionBlock_custom(out_channels,
-        #                                           torch.nn.ReLU(),
-        #                                           align_corners=True, upsample=False)
-        #
+        self.swin_2 = swin.SIMTransformerBlock(out_channels, 8, (out_channels // 2, out_channels // 2), win_size=8)
+        self.swin_3 = swin.SIMTransformerBlock(out_channels, 8, (out_channels // 4, out_channels // 4), win_size=8)
+        self.swin_4 = swin.SIMTransformerBlock(out_channels, 8, (out_channels // 4, out_channels // 4), win_size=8)
+
+        # fusion layers
+        self.fusion_1 = FeatureFusionBlock_custom(out_channels,
+                                                  torch.nn.ReLU(),
+                                                  align_corners=True)
+
+        self.fusion_2 = FeatureFusionBlock_custom(out_channels,
+                                                  torch.nn.ReLU(),
+                                                  align_corners=True)
+
+        self.fusion_3 = FeatureFusionBlock_custom(out_channels,
+                                                  torch.nn.ReLU(),
+                                                  align_corners=True)
+
+        self.fusion_4 = FeatureFusionBlock_custom(out_channels,
+                                                  torch.nn.ReLU(),
+                                                  align_corners=True, upsample=False)
+
         # output
         self.out_conv = torch.nn.Sequential(torch.nn.Linear(256, 256),
                                             torch.nn.ReLU(),
@@ -178,26 +178,16 @@ class Materoal_Prediction_Module(pl.LightningModule):
                                             torch.nn.Linear(128, self.output_channel),
                                             torch.nn.Sigmoid())
 
-        self.conv1 = torch.nn.Sequential(torch.nn.Conv2d(256, 256, kernel_size=5, padding=2, bias=True),
-                                         torch.nn.ReLU(),
-                                         torch.nn.Conv2d(256, 256, kernel_size=3, padding=1, bias=True),
-                                         torch.nn.ReLU(),
-                                         torch.nn.Conv2d(256, 128, kernel_size=5, padding=2, bias=True),
-                                         torch.nn.ReLU(),
-                                         torch.nn.Conv2d(128, 128, kernel_size=3, padding=1, bias=True),
-                                         torch.nn.ReLU(),
-                                         torch.nn.Conv2d(128, self.output_channel, kernel_size=3, padding=1, bias=True),
-                                         torch.nn.Sigmoid())
-
-        # self.out_conv = torch.nn.Sequential(torch.nn.Conv2d(256, 256, kernel_size=1, bias=True),
-        #                                     torch.nn.ReLU(),
-        #                                     torch.nn.Conv2d(256, 128, kernel_size=1, bias=True),
-        #                                     torch.nn.ReLU(),
-        #                                     torch.nn.Conv2d(128, 128, kernel_size=1, bias=True),
-        #                                     torch.nn.ReLU(),
-        #                                     torch.nn.Conv2d(128, self.output_channel, kernel_size=1, bias=True),
-        #                                     torch.nn.Sigmoid(),
-        #                                     )
+        # self.conv1 = torch.nn.Sequential(torch.nn.Conv2d(256, 256, kernel_size=5, padding=2, bias=True),
+        #                                  torch.nn.ReLU(),
+        #                                  torch.nn.Conv2d(256, 256, kernel_size=3, padding=1, bias=True),
+        #                                  torch.nn.ReLU(),
+        #                                  torch.nn.Conv2d(256, 128, kernel_size=5, padding=2, bias=True),
+        #                                  torch.nn.ReLU(),
+        #                                  torch.nn.Conv2d(128, 128, kernel_size=3, padding=1, bias=True),
+        #                                  torch.nn.ReLU(),
+        #                                  torch.nn.Conv2d(128, self.output_channel, kernel_size=3, padding=1, bias=True),
+        #                                  torch.nn.Sigmoid())
 
     def forward(self, x, ref_pos):
         B, C, H, W = x.shape
@@ -210,48 +200,48 @@ class Materoal_Prediction_Module(pl.LightningModule):
         # context_embeddings_3.shape b, 256, 64, 64
         # context_embeddings_4.shape b, 256, 64, 64
 
-        # conv test
-        if not self.use_swin:
-            conv1 = self.conv1(context_embeddings_1)
-            predictions = torch.nn.functional.interpolate(conv1, scale_factor=2, mode="bilinear",
-                                                          align_corners=False)
-        else:
-            # swin blocks
-            swin_layer_1 = self.swin_1(context_embeddings_1.permute(0, 2, 3, 1).reshape(B, -1, 256),
-                                       cluster_mask=scores)
-            unflattened_1 = swin_layer_1.permute(0, 2, 1).reshape(B, -1, 256, 256)
-            midtemp = self.out_conv(unflattened_1.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
-            predictions = torch.nn.functional.interpolate(midtemp, scale_factor=2, mode="bilinear",
-                                                          align_corners=False)
+        # # conv test
+        # if not self.use_swin:
+        #     conv1 = self.conv1(context_embeddings_1)
+        #     predictions = torch.nn.functional.interpolate(conv1, scale_factor=2, mode="bilinear",
+        #                                                   align_corners=False)
+        # else:
+        #     # swin blocks
+        #     swin_layer_1 = self.swin_1(context_embeddings_1.permute(0, 2, 3, 1).reshape(B, -1, 256),
+        #                                cluster_mask=scores)
+        #     unflattened_1 = swin_layer_1.permute(0, 2, 1).reshape(B, -1, 256, 256)
+        #     midtemp = self.out_conv(unflattened_1.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        #     predictions = torch.nn.functional.interpolate(midtemp, scale_factor=2, mode="bilinear",
+        #                                                   align_corners=False)
 
-        # # swin blocks
-        # swin_layer_1 = self.swin_1(context_embeddings_1.permute(0, 2, 3, 1).reshape(B, -1, 256), cluster_mask=scores)
-        # swin_layer_2 = self.swin_2(context_embeddings_2.permute(0, 2, 3, 1).reshape(B, -1, 256), cluster_mask=scores)
-        # swin_layer_3 = self.swin_3(context_embeddings_3.permute(0, 2, 3, 1).reshape(B, -1, 256), cluster_mask=scores)
-        # swin_layer_4 = self.swin_4(context_embeddings_4.permute(0, 2, 3, 1).reshape(B, -1, 256), cluster_mask=scores)
-        #
-        # # Unflattening the spatial token maps at the different scales from different blocks
-        # unflattened_1 = swin_layer_1.permute(0, 2, 1).reshape(B, -1, 256, 256)
-        # unflattened_2 = swin_layer_2.permute(0, 2, 1).reshape(B, -1, 128, 128)
-        # unflattened_3 = swin_layer_3.permute(0, 2, 1).reshape(B, -1, 64, 64)
-        # unflattened_4 = swin_layer_4.permute(0, 2, 1).reshape(B, -1, 64, 64)
-        #
+        # swin blocks
+        swin_layer_1 = self.swin_1(context_embeddings_1.permute(0, 2, 3, 1).reshape(B, -1, 256), cluster_mask=scores)
+        swin_layer_2 = self.swin_2(context_embeddings_2.permute(0, 2, 3, 1).reshape(B, -1, 256), cluster_mask=scores)
+        swin_layer_3 = self.swin_3(context_embeddings_3.permute(0, 2, 3, 1).reshape(B, -1, 256), cluster_mask=scores)
+        swin_layer_4 = self.swin_4(context_embeddings_4.permute(0, 2, 3, 1).reshape(B, -1, 256), cluster_mask=scores)
+
+        # Unflattening the spatial token maps at the different scales from different blocks
+        unflattened_1 = swin_layer_1.permute(0, 2, 1).reshape(B, -1, 256, 256)
+        unflattened_2 = swin_layer_2.permute(0, 2, 1).reshape(B, -1, 128, 128)
+        unflattened_3 = swin_layer_3.permute(0, 2, 1).reshape(B, -1, 64, 64)
+        unflattened_4 = swin_layer_4.permute(0, 2, 1).reshape(B, -1, 64, 64)
+
         # # convs
-        # # unflattened_1 = self.conv1(context_embeddings_1)
-        # # unflattened_2 = self.conv2(context_embeddings_2)
-        # # unflattened_3 = self.conv3(context_embeddings_3)
-        # # unflattened_4 = self.conv4(context_embeddings_4)
-        #
-        # # merge
-        # path4 = self.fusion_4(unflattened_4)
-        # path3 = self.fusion_3(unflattened_3, path4)
-        # path2 = self.fusion_2(unflattened_2, path3)
-        # path1 = self.fusion_1(unflattened_1, path2)
-        #
-        # # result
-        # predictions = self.out_conv(path1.permute(0, 2, 3, 1)).reshape(B, -1, H, W)
-        # # return predictions
-        #
+        # unflattened_1 = self.conv1(context_embeddings_1)
+        # unflattened_2 = self.conv2(context_embeddings_2)
+        # unflattened_3 = self.conv3(context_embeddings_3)
+        # unflattened_4 = self.conv4(context_embeddings_4)
+
+        # merge
+        path4 = self.fusion_4(unflattened_4)
+        path3 = self.fusion_3(unflattened_3, path4)
+        path2 = self.fusion_2(unflattened_2, path3)
+        path1 = self.fusion_1(unflattened_1, path2)
+
+        # result
+        predictions = self.out_conv(path1.permute(0, 2, 3, 1)).reshape(B, -1, H, W)
+        # return predictions
+
         # result departure
         albedoPred, roughPred, metalPred = predictions.split([3, 1, 1], dim=1)
 
@@ -436,7 +426,7 @@ class TopModule(pl.LightningModule):
         segAlb = batch['img']['segAlb']
         segMat = batch['img']['segMat']
 
-        im = batch['im']
+        im = batch['img']['im']
 
         ref_pos = batch['ref_pos']
 
@@ -446,7 +436,7 @@ class TopModule(pl.LightningModule):
 
         m_utils.plot_images(albedo, albedoPred, im, segAlb, os.path.join(self.cfg.experiment.path_logs, f"test/albedo/{batch_nb:04d}.png"))
         m_utils.plot_images(rough[:,0,...], roughPred[:,0,...], im, segMat[:,0,...], os.path.join(self.cfg.experiment.path_logs, f"test/roughness/{batch_nb:04d}.png"), colormap='jet')
-        m_utils.plot_images(metal[:,0,...], metalPred[:,1,...], im, segMat[:,0,...], os.path.join(self.cfg.experiment.path_logs, f"test/metallic/{batch_nb:04d}.png"), colormap='jet')
+        m_utils.plot_images(metal[:,0,...], metalPred[:,0,...], im, segMat[:,0,...], os.path.join(self.cfg.experiment.path_logs, f"test/metallic/{batch_nb:04d}.png"), colormap='jet')
 
         pixAlbNum = torch.sum(segAlb).item()
         pixMatNum = torch.sum(segMat).item()
