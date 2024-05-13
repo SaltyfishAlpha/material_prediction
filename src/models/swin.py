@@ -300,6 +300,7 @@ class WindowAttention(nn.Module):
 
         if cluster_mask != None:
             cluster_correlation_map = cluster_mask @ cluster_mask.transpose(-2, -1)
+            cluster_correlation_map = cluster_correlation_map.unsqueeze(1)
 
         q, k, v = self.qkv(x, attn_kv)
         q = q * self.scale
@@ -314,7 +315,9 @@ class WindowAttention(nn.Module):
             attn = dino_mat_correlation_map * attn
         if point_feature != None:
             attn = plane_correlation_map * attn
-            # if shadow_detect_feature != None:
+        if cluster_mask != None:
+            attn = cluster_correlation_map * attn
+        # if shadow_detect_feature != None:
         #     for i in range(0, shadow_correlation_map.shape[0]):
         #         win_shadow_detect_feature = shadow_correlation_map.permute(0,2,3,1).detach().cpu().numpy()[i]
         #         win_dino_mat = dino_mat_correlation_map.permute(0,2,3,1).detach().cpu().numpy()[i]
@@ -436,19 +439,6 @@ class SIMTransformerBlock(nn.Module):
         W = self.input_resolution[1]
         assert L == W * H, f"Input image size ({H}*{W} doesn't match model ({L})."
 
-        # if dino_mat != None:
-        #     C_dino_mat = dino_mat.shape[1]
-        # if shadow_detect_feature != None:
-        #     C_shadow_detect_feature = shadow_detect_feature.shape[1]
-        # if point != None:
-        #     C_point = point.shape[1]
-        # if normal != None:
-        #     C_normal = normal.shape[1]
-        # if color != None:
-        #     C_color = color.shape[1]
-        # if shadow_mask != None:
-        #     C_shadow_mask = shadow_mask.shape[1]
-
         ## input mask
         if mask != None:
             input_mask = F.interpolate(mask, size=(H, W)).permute(0, 2, 3, 1).contiguous()
@@ -490,6 +480,19 @@ class SIMTransformerBlock(nn.Module):
         x = x.view(B, H, W, C)
 
         # if dino_mat != None:
+        #     C_dino_mat = dino_mat.shape[1]
+        # if shadow_detect_feature != None:
+        #     C_shadow_detect_feature = shadow_detect_feature.shape[1]
+        # if point != None:
+        #     C_point = point.shape[1]
+        # if normal != None:
+        #     C_normal = normal.shape[1]
+        # if color != None:
+        #     C_color = color.shape[1]
+        # if shadow_mask != None:
+        #     C_shadow_mask = shadow_mask.shape[1]
+
+        # if dino_mat != None:
         #     dino_mat = dino_mat.permute(0, 2, 3, 1).contiguous()
         #
         # if shadow_detect_feature != None:
@@ -507,9 +510,9 @@ class SIMTransformerBlock(nn.Module):
         # if shadow_mask != None:
         #     shadow_mask = shadow_mask.permute(0, 2, 3, 1).contiguous()
 
-        if cluster_mask != None:
-            cluster_mask = cluster_mask.unsqueeze(-1).contiguous()
-            C_cluster_mask = cluster_mask.shape[-1]
+        if cluster_mask is not None:
+            cluster_mask = cluster_mask.permute(0, 2, 3, 1).contiguous()
+            C_cluster_mask = 1
 
         # cyclic shift
         if self.shift_size > 0:

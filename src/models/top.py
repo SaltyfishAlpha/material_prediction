@@ -195,11 +195,6 @@ class Materoal_Prediction_Module(pl.LightningModule):
             scores, _, _, _, _, context_embeddings_1, context_embeddings_2, context_embeddings_3, context_embeddings_4, _, _, _, _ = self.mtModule.net(
                 x, ref_pos)
 
-        # context_embeddings_1.shape b, 256, 256, 256
-        # context_embeddings_2.shape b, 256, 128, 128
-        # context_embeddings_3.shape b, 256, 64, 64
-        # context_embeddings_4.shape b, 256, 64, 64
-
         # # conv test
         # if not self.use_swin:
         #     conv1 = self.conv1(context_embeddings_1)
@@ -215,10 +210,37 @@ class Materoal_Prediction_Module(pl.LightningModule):
         #                                                   align_corners=False)
 
         # swin blocks
-        swin_layer_1 = self.swin_1(context_embeddings_1.permute(0, 2, 3, 1).reshape(B, -1, 256), cluster_mask=scores)
-        swin_layer_2 = self.swin_2(context_embeddings_2.permute(0, 2, 3, 1).reshape(B, -1, 256), cluster_mask=scores)
-        swin_layer_3 = self.swin_3(context_embeddings_3.permute(0, 2, 3, 1).reshape(B, -1, 256), cluster_mask=scores)
-        swin_layer_4 = self.swin_4(context_embeddings_4.permute(0, 2, 3, 1).reshape(B, -1, 256), cluster_mask=scores)
+        # context_embeddings_1.shape b, 256, 256, 256
+        # context_embeddings_2.shape b, 256, 128, 128
+        # context_embeddings_3.shape b, 256, 64, 64
+        # context_embeddings_4.shape b, 256, 64, 64
+
+        scores = scores.unsqueeze(1)
+        # scores = None
+
+        scores = torch.nn.functional.interpolate(scores, size=(256, 256), mode='bilinear', align_corners=False)
+        swin_layer_1 = self.swin_1(
+            context_embeddings_1.permute(0, 2, 3, 1).reshape(B, -1, 256),
+            cluster_mask=scores,
+        )
+
+        scores = torch.nn.functional.interpolate(scores, size=(128, 128), mode='bilinear', align_corners=False)
+        swin_layer_2 = self.swin_2(
+            context_embeddings_2.permute(0, 2, 3, 1).reshape(B, -1, 256),
+            cluster_mask=scores,
+        )
+
+        scores = torch.nn.functional.interpolate(scores, size=(64, 64), mode='bilinear', align_corners=False)
+        swin_layer_3 = self.swin_3(
+            context_embeddings_3.permute(0, 2, 3, 1).reshape(B, -1, 256),
+            cluster_mask=scores,
+        )
+
+        scores = torch.nn.functional.interpolate(scores, size=(64, 64), mode='bilinear', align_corners=False)
+        swin_layer_4 = self.swin_4(
+            context_embeddings_4.permute(0, 2, 3, 1).reshape(B, -1, 256),
+            cluster_mask=scores,
+        )
 
         # Unflattening the spatial token maps at the different scales from different blocks
         unflattened_1 = swin_layer_1.permute(0, 2, 1).reshape(B, -1, 256, 256)
@@ -437,6 +459,7 @@ class TopModule(pl.LightningModule):
         m_utils.plot_images(albedo, albedoPred, im, segAlb, os.path.join(self.cfg.experiment.path_logs, f"test/albedo/{batch_nb:04d}.png"))
         m_utils.plot_images(rough[:,0,...], roughPred[:,0,...], im, segMat[:,0,...], os.path.join(self.cfg.experiment.path_logs, f"test/roughness/{batch_nb:04d}.png"), colormap='jet')
         m_utils.plot_images(metal[:,0,...], metalPred[:,0,...], im, segMat[:,0,...], os.path.join(self.cfg.experiment.path_logs, f"test/metallic/{batch_nb:04d}.png"), colormap='jet')
+        m_utils.plot_images_wo_gt(scores, im, segAlb, os.path.join(self.cfg.experiment.path_logs, f"test/scores/{batch_nb:04d}.png"), colormap='jet')
 
         pixAlbNum = torch.sum(segAlb).item()
         pixMatNum = torch.sum(segMat).item()

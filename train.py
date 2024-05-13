@@ -113,7 +113,7 @@ with open('materialistic_checkpoint/args.pkl', 'rb') as f:
     # print(margs)
 
 # create model
-net = top_module.TopModule(mconf, margs, cfg, use_swin=args.swin, load_location=torch.device('cuda:1'), use_prec=args.prec)
+net = top_module.TopModule(mconf, margs, cfg, use_swin=args.swin, load_location=torch.device('cuda:0'), use_prec=args.prec)
 # Test
 # net = net.cuda()
 # net.eval()
@@ -140,7 +140,7 @@ if args.resume:
                          precision=args.precision,
                          max_epochs=cfg.train.epochs,
                          logger=logger,
-                         log_every_n_steps=args.print_every,  # cfg.val.interval,
+                         log_every_n_steps=args.print_every if not args.small_size else 50,  # cfg.val.interval,
                          callbacks=[checkpoint_callback],
                          check_val_every_n_epoch=1 if args.small_size else None,  # cfg.val.interval,
                          gradient_clip_val=0.5,
@@ -159,7 +159,7 @@ else:
                          precision=args.precision,
                          max_epochs=cfg.train.epochs,
                          logger=logger,
-                         log_every_n_steps=args.print_every,  # cfg.val.interval,
+                         log_every_n_steps=args.print_every if not args.small_size else 50,  # cfg.val.interval,
                          check_val_every_n_epoch=1 if args.small_size else None,  # cfg.val.interval,
                          gradient_clip_val=0.5,
                          gradient_clip_algorithm="value",

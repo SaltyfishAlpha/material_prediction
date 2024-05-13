@@ -19,7 +19,7 @@ optim:
   - 0.999
   lr: 0.00005
 train:
-  batch_size: 4
+  batch_size: 2
   epochs: 20
   perceptual:
     albedo:
@@ -31,5 +31,5 @@ train:
     weight: 0.02
   save_epochs: 1
 val:
-  batch_size: 4
+  batch_size: 2
   interval: 1
