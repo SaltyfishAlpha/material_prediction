@@ -17,6 +17,9 @@ class MPDataset(Dataset):
 
     def __getitem__(self, index):
         rand_h, rand_w = np.random.randint(0, self.mgData.imHeight), np.random.randint(0, self.mgData.imWidth)
+        while (self.mgData[index]['segAlb'][0, rand_h, rand_w] == 0
+               or self.mgData[index]['segMat'][0, rand_h, rand_w] == 0):
+            rand_h, rand_w = np.random.randint(0, self.mgData.imHeight), np.random.randint(0, self.mgData.imWidth)
         tmp = {'img': self.mgData[index], 'ref_pos': torch.tensor([rand_h, rand_w])}
         # print(tmp['img']['im'].size(), tmp['ref_pos'].size())
         return tmp
