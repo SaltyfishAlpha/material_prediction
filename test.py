@@ -23,7 +23,7 @@ import materialistic.src.utils.utils as materialistic_utils
 
 from torchinfo import summary
 
-torch.cuda.set_device(1)
+# torch.cuda.set_device(1)
 
 #        args & config        #
 args, cfg = utils_args.parse_args()
@@ -100,7 +100,7 @@ if args.metrics:
     trainer.test(net, ckpt_path=os.path.join(args.checkpoint_dir, checkpoint_files[-1]), dataloaders=test_data_loader)
 
 else: # output result
-    net = net.cuda()
+    net = net
     net.load_from_checkpoint(os.path.join(args.checkpoint_dir, checkpoint_files[-1]), mconf=mconf, margs=margs, cfg=cfg,
                              use_swin=args.swin, load_location=torch.device('cuda:1'), use_prec=args.prec)
     net.eval()

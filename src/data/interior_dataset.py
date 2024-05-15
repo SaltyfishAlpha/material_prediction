@@ -136,6 +136,9 @@ class MGDataset(Dataset):
         if self.clamp_im:
             im = im.clamp_(0, 1)
 
+        # test
+        sceneDir = osp.dirname(self.imList[index])
+
         batchDict = {
             'albedo': albedo,
             'normal': normal,
@@ -148,7 +151,8 @@ class MGDataset(Dataset):
             'segGeo': segGeo,
             'seg': seg,
             'im': im,
-            'scene': sceneName
+            'scene': sceneName,
+            'dir': sceneDir,
         }
         if self.random_flip and torch.rand(1) < 0.5:
             import torchvision.transforms.transforms as transforms

@@ -29,3 +29,10 @@ def plot_images_wo_gt(pred, image, filename, colormap=None):
         img = torch.from_numpy(img).permute(0, 3, 1, 2)
         img = torch.cat((image.cpu(), img), dim=0)
     vutils.save_image(img, filename, nrow=B)
+
+def correct_exposure(im):
+    im = torch.log(1 + im)
+    im /= 8.0 * im.mean()
+    im = torch.exp(im) - 1.0
+    im = torch.pow(im.clip(0, 1), 1 / 2.2)
+    return im
